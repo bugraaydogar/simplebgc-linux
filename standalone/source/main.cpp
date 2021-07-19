@@ -8,9 +8,14 @@
 #include <sbgc/SBGC.h>
 #include <sbgc/SBGC_Linux.h>
 
-#define REALTIME_DATA_REQUEST_INTERAL_MS 100 
+#include <errno.h>
+#include <fcntl.h> 
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
 
-using namespace mn::CppLinuxSerial;
+#define REALTIME_DATA_REQUEST_INTERAL_MS 50 
+
 static SBGC_cmd_realtime_data_t rt_data;
 static uint16_t cur_time_ms, rt_req_last_time_ms;
 
@@ -63,14 +68,16 @@ void process_in_queue() {
 		
 		uint8_t error = 0;
 		
+    //std::cout<<"process_in_queue cmd id: " << cmd.id << std::endl; 
+
 		switch(cmd.id) {
 		// Receive realtime data
 		case SBGC_CMD_REALTIME_DATA_3:
 		case SBGC_CMD_REALTIME_DATA_4:
 			error = SBGC_cmd_realtime_data_unpack(rt_data, cmd);
 			if(!error) {
-        std::cout<<"ROLL: " << rt_data.imu_angle[ROLL] << "PITCH: " << rt_data.imu_angle[ROLL] << "YAW: " << rt_data.imu_angle[YAW] << std::endl;
-        std::cout<<"Target ROLL: " << rt_data.target_angle[ROLL] << "Target PITCH: " << rt_data.target_angle[ROLL] << " Target YAW: " << rt_data.target_angle[YAW] << std::endl;
+        std::cout<<"ROLL: " << rt_data.imu_angle[ROLL] << " PITCH: " << rt_data.imu_angle[ROLL] << " YAW: " << rt_data.imu_angle[YAW] << std::endl;
+        std::cout<<"Target ROLL: " << rt_data.target_angle[ROLL] << " Target PITCH: " << rt_data.target_angle[ROLL] << " Target YAW: " << rt_data.target_angle[YAW] << std::endl;
 
 			} else {
 				sbgc_parser.onParseError(error);
@@ -99,16 +106,80 @@ void process_in_queue() {
 	}
 }
 
+int
+set_interface_attribs (int fd, int speed, int parity)
+{
+        struct termios tty;
+        if (tcgetattr (fd, &tty) != 0)
+        {
+          std::cout<<"error from tcgetattr" <<std::endl;
+          return -1;
+        }
+
+        cfsetospeed (&tty, speed);
+        cfsetispeed (&tty, speed);
+
+        tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;     // 8-bit chars
+        // disable IGNBRK for mismatched speed tests; otherwise receive break
+        // as \000 chars
+        tty.c_iflag &= ~IGNBRK;         // disable break processing
+        tty.c_lflag = 0;                // no signaling chars, no echo,
+                                        // no canonical processing
+        tty.c_oflag = 0;                // no remapping, no delays
+        tty.c_cc[VMIN]  = 0;            // read doesn't block
+        tty.c_cc[VTIME] = 1;            // 0.5 seconds read timeout
+
+        tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
+
+        tty.c_cflag |= (CLOCAL | CREAD);// ignore modem controls,
+                                        // enable reading
+        tty.c_cflag &= ~(PARENB | PARODD);      // shut off parity
+        tty.c_cflag |= parity;
+        tty.c_cflag &= ~CSTOPB;
+        tty.c_cflag &= ~CRTSCTS;
+
+        if (tcsetattr (fd, TCSANOW, &tty) != 0)
+        {
+          std::cout<<"error from tcsetattr" <<std::endl;
+          return -1;
+        }
+        return 0;
+}
+
+void
+set_blocking (int fd, int should_block)
+{
+        struct termios tty;
+        memset (&tty, 0, sizeof tty);
+        if (tcgetattr (fd, &tty) != 0)
+        {
+          std::cout<<"error from tggetattr" <<std::endl;
+          return;
+        }
+
+        tty.c_cc[VMIN]  = should_block ? 1 : 0;
+        tty.c_cc[VTIME] = 1;            // 0.5 seconds read timeout
+
+        if (tcsetattr (fd, TCSANOW, &tty) != 0)
+          std::cout<<"error setting term attributes" <<std::endl;
+}
+
 auto main(int argc, char** argv) -> int {
-  std::cout << "Hi from Bugra's program" << std::endl;
 
   bool isInitalized = false;
-	// Create serial port object and open serial port
-	SerialPort serialPort("/dev/ttyUSB1", BaudRate::B_115200);
-	serialPort.SetTimeout(100); // Block when reading until any data is received
-	serialPort.Open();
 
-	SBGC_Demo_setup(&serialPort);
+  char *portname = "/dev/ttyUSB2";
+  int fd = open (portname, O_RDWR | O_NOCTTY | O_SYNC);
+  if (fd < 0)
+  {
+    std::cout<<"error opening serial port" <<std::endl;
+    return 0;
+  }
+
+  set_interface_attribs (fd, B115200, 0);  // set speed to 115,200 bps, 8n1 (no parity) 
+  set_blocking (fd, 0);                // set no blocking
+
+	SBGC_Demo_setup(fd);
 
   // wait for gimbal controller to be initialized.
   sleep(3);
@@ -118,16 +189,17 @@ auto main(int argc, char** argv) -> int {
     struct timeval  tv;
     gettimeofday(&tv, NULL);
     cur_time_ms = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
-    std::cout << "Hi from Bugra's 3 program" << std::endl;
+    //std::cout << "Hi from Bugra's 3 program" << std::endl;
     process_in_queue();
 	  ////////// Request realtime data with the fixed rate
 	  if((cur_time_ms - rt_req_last_time_ms) > REALTIME_DATA_REQUEST_INTERAL_MS) {
+      std::cout<<"The diff is : " << cur_time_ms - rt_req_last_time_ms << std::endl;
 		  SerialCommand cmd;
       if (!isInitalized) {
         cmd.init(SBGC_CMD_BOARD_INFO);
         isInitalized = true;
       } else {
-        std::cout<<"Request the RealTime Info"<<std::endl;
+        //std::cout<<"Request the RealTime Info"<<std::endl;
         cmd.init(SBGC_CMD_REALTIME_DATA_4);
       }
 			

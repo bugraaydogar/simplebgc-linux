@@ -18,12 +18,12 @@ Copyright (c) 2014-2015 Aleksey Moskalenko
 #include <inttypes.h>
 #include <sbgc/SBGC.h>
 #include <sbgc/SBGC_Linux.h>
-#include <CppLinuxSerial/SerialPort.hpp>
-using namespace mn::CppLinuxSerial;
+#include <unistd.h>
+
 
 extern SBGC_Parser sbgc_parser; 
 
-void SBGC_Demo_setup(SerialPort *serialPort);
+void SBGC_Demo_setup(int fd);
 
 
 #endif

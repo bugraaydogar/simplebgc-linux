@@ -1,13 +1,13 @@
 
 #include "sbgc/SBGC_Linux.h"
-
+#include <iostream>
 /* Defines serial port routines required for SBGC_parser, here */
 class LinuxSerialPort : public SBGC_ComObj {
-	SerialPort *serialPort;
+	int fd;
 	
   public:
-	inline void init(SerialPort *s) {
-		serialPort = s;
+	inline void init(int _fd) {
+		fd = _fd;
 	}
 
 	virtual uint16_t getBytesAvailable() {
@@ -16,15 +16,25 @@ class LinuxSerialPort : public SBGC_ComObj {
 	}
 	
 	virtual uint8_t readByte() {
-		std::string data;
-    serialPort->Read(data);
-    std::cout<<"ReadByte: "<< data << std::endl;
-    return 0;
+    //std::cout<<"Reading from Serial" << std::endl;
+    uint8_t buf;
+    int retval = read(fd, &buf, sizeof(uint8_t));
+    if( retval < 0 ) {
+      std::cout<<"Error during readByte" << std::endl;
+      return 0;
+    }
+
+    return buf;
 	}
 	
 	virtual void writeByte(uint8_t b) {
-    std::cout<<"writeByte: "<< std::hex << b << std::endl;
-    serialPort->Write(std::to_string(b));
+    //std::cout<<"Written Data is: " << b << std::endl;
+    int retval = write(fd, &b, sizeof(b));
+    if( retval < 0 ) {
+      std::cout<<"Error during writeByte" << std::endl;
+    } else {
+      //std::cout<<"Written Byte is: " << retval <<std::endl;
+    }
 	}
 	
 	// Arduino com port is not buffered, so empty space is unknown.
@@ -42,7 +52,7 @@ LinuxSerialPort com_obj; // COM-port wrapper required for parser
 
 
 // Prepare hardware, used in examples
-void SBGC_Demo_setup(SerialPort *serial) {
-  com_obj.init(serial);
+void SBGC_Demo_setup(int fd) {
+  com_obj.init(fd);
   sbgc_parser.init(&com_obj);
 }
