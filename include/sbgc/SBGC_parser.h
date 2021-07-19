@@ -15,6 +15,7 @@
 #include <string.h>
 #include "SBGC_command.h"
 #include <cstdio>
+#include <iostream>
 
 #define SBGC_CMD_START_BYTE '>'
 
@@ -229,6 +230,8 @@ public:
 	 * Calls  onParseError() in case of errors
 	 */
 	inline uint8_t process_char(uint8_t c) {
+		//std::cout<<"process char: " << c << std::endl;
+		//std::cout<<"state" << state << std::endl;
 		switch(state) {
 			case STATE_WAIT:
 				if(c == SBGC_CMD_START_BYTE) {
@@ -284,8 +287,10 @@ public:
 	inline int8_t read_cmd() {
 		//while(com_obj->getBytesAvailable()) {
 			if(process_char(com_obj->readByte())) {
+				//printf("read_cmd return true");
 				return 1;
 			}
+			//printf("read_cmd return false");
 		//}
 
 		return 0;
@@ -302,7 +307,7 @@ public:
 		if(com_obj != NULL && size <= (SBGC_CMD_MAX_BYTES - SBGC_CMD_NON_PAYLOAD_BYTES)) {
 			if(wait || com_obj->getOutEmptySpace() >= size + SBGC_CMD_NON_PAYLOAD_BYTES) {
 				com_obj->writeByte(SBGC_CMD_START_BYTE); // protocol-specific start marker
-				printf("CMD ID: %d", cmd_id);
+				//printf("CMD ID: %d", cmd_id);
 				com_obj->writeByte(cmd_id); // command id
 				com_obj->writeByte(size); // data body length
 				com_obj->writeByte(cmd_id + size); // header checksum
