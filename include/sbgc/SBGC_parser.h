@@ -14,7 +14,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include "SBGC_command.h"
-
+#include <cstdio>
 
 #define SBGC_CMD_START_BYTE '>'
 
@@ -282,11 +282,11 @@ public:
 	 * Returns 1 if command is parsed, 0 otherwise.
 	 */
 	inline int8_t read_cmd() {
-		while(com_obj->getBytesAvailable()) {
+		//while(com_obj->getBytesAvailable()) {
 			if(process_char(com_obj->readByte())) {
 				return 1;
 			}
-		}
+		//}
 
 		return 0;
 	}
@@ -302,6 +302,7 @@ public:
 		if(com_obj != NULL && size <= (SBGC_CMD_MAX_BYTES - SBGC_CMD_NON_PAYLOAD_BYTES)) {
 			if(wait || com_obj->getOutEmptySpace() >= size + SBGC_CMD_NON_PAYLOAD_BYTES) {
 				com_obj->writeByte(SBGC_CMD_START_BYTE); // protocol-specific start marker
+				printf("CMD ID: %d", cmd_id);
 				com_obj->writeByte(cmd_id); // command id
 				com_obj->writeByte(size); // data body length
 				com_obj->writeByte(cmd_id + size); // header checksum
