@@ -11,8 +11,10 @@
 #include <errno.h>
 #include <fcntl.h> 
 #include <string.h>
-#include <termios.h>
 #include <unistd.h>
+#include <CppLinuxSerial/SerialPort.hpp>
+
+using namespace mn::CppLinuxSerial;
 
 #define REALTIME_DATA_REQUEST_INTERAL_MS 50 
 
@@ -106,78 +108,16 @@ void process_in_queue() {
 	}
 }
 
-int
-set_interface_attribs (int fd, int speed, int parity)
-{
-        struct termios tty;
-        if (tcgetattr (fd, &tty) != 0)
-        {
-          std::cout<<"error from tcgetattr" <<std::endl;
-          return -1;
-        }
-
-        cfsetospeed (&tty, speed);
-        cfsetispeed (&tty, speed);
-
-        tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;     // 8-bit chars
-        // disable IGNBRK for mismatched speed tests; otherwise receive break
-        // as \000 chars
-        tty.c_iflag &= ~IGNBRK;         // disable break processing
-        tty.c_lflag = 0;                // no signaling chars, no echo,
-                                        // no canonical processing
-        tty.c_oflag = 0;                // no remapping, no delays
-        tty.c_cc[VMIN]  = 0;            // read doesn't block
-        tty.c_cc[VTIME] = 1;            // 0.5 seconds read timeout
-
-        tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
-
-        tty.c_cflag |= (CLOCAL | CREAD);// ignore modem controls,
-                                        // enable reading
-        tty.c_cflag &= ~(PARENB | PARODD);      // shut off parity
-        tty.c_cflag |= parity;
-        tty.c_cflag &= ~CSTOPB;
-        tty.c_cflag &= ~CRTSCTS;
-
-        if (tcsetattr (fd, TCSANOW, &tty) != 0)
-        {
-          std::cout<<"error from tcsetattr" <<std::endl;
-          return -1;
-        }
-        return 0;
-}
-
-void
-set_blocking (int fd, int should_block)
-{
-        struct termios tty;
-        memset (&tty, 0, sizeof tty);
-        if (tcgetattr (fd, &tty) != 0)
-        {
-          std::cout<<"error from tggetattr" <<std::endl;
-          return;
-        }
-
-        tty.c_cc[VMIN]  = should_block ? 1 : 0;
-        tty.c_cc[VTIME] = 1;            // 0.5 seconds read timeout
-
-        if (tcsetattr (fd, TCSANOW, &tty) != 0)
-          std::cout<<"error setting term attributes" <<std::endl;
-}
-
 auto main(int argc, char** argv) -> int {
 
   bool isInitalized = false;
 
-  char *portname = "/dev/ttyUSB2";
-  int fd = open (portname, O_RDWR | O_NOCTTY | O_SYNC);
-  if (fd < 0)
-  {
-    std::cout<<"error opening serial port" <<std::endl;
-    return 0;
-  }
-
-  set_interface_attribs (fd, B115200, 0);  // set speed to 115,200 bps, 8n1 (no parity) 
-  set_blocking (fd, 0);                // set no blocking
+	// Create serial port object and open serial port
+	SerialPort serialPort("/dev/ttyUSB0", BaudRate::B_115200);
+	// Use SerialPort serialPort("/dev/ttyACM0", 13000); instead if you want to provide a custom baud rate
+	serialPort.SetTimeout(100); // Block when reading until any data is received
+	int fd = serialPort.Open();
+  std::cout<<"FD :" << fd << std::endl;
 
 	SBGC_Demo_setup(fd);
 
